@@ -26,12 +26,10 @@ import io.restassured.RestAssured
 import io.restassured.builder.RequestSpecBuilder
 import io.restassured.specification.RequestSpecification
 import org.junit.Rule
-import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.restdocs.JUnitRestDocumentation
-import org.springframework.restdocs.RestDocumentationContextProvider
 import rest.docs.snippets.LoginSnippets
 
 import static org.springframework.restdocs.operation.preprocess.Preprocessors.*
@@ -50,9 +48,11 @@ class LoginSpec extends GebSpec {
     JUnitRestDocumentation restDocumentation = new JUnitRestDocumentation('build/docs/generated-snippets')
     RequestSpecification   documentSpec
 
-    @BeforeEach
-    void setup(RestDocumentationContextProvider restDocumentation) {
-        this.documentSpec = new RequestSpecBuilder().addFilter(documentationConfiguration(restDocumentation)).build()
+
+    void setup() {
+        this.documentSpec = new RequestSpecBuilder()
+                .addFilter(documentationConfiguration(restDocumentation))
+                .build()
     }
 
     void "Test Login"() {
