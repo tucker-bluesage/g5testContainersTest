@@ -47,7 +47,6 @@ dependencies {
     testImplementation 'org.mockito:mockito-core'
     testImplementation 'org.grails:grails-web-testing-support'
     testImplementation 'org.testcontainers:mysql:1.17.5'
-    testImplementation "org.testcontainers:spock:1.17.5"
 }
 
 //task to clean generated rest api docs snippets dir
