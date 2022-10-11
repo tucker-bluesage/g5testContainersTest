@@ -32,7 +32,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.restdocs.JUnitRestDocumentation
 import org.springframework.restdocs.RestDocumentationContextProvider
-import org.testcontainers.spock.Testcontainers
 import rest.docs.snippets.LoginSnippets
 
 import static org.springframework.restdocs.operation.preprocess.Preprocessors.*
@@ -40,7 +39,6 @@ import static org.springframework.restdocs.restassured3.RestAssuredRestDocumenta
 
 @Integration
 @Rollback
-@Testcontainers
 class LoginSpec extends GebSpec {
 
     static final String Login_URL = '/api/login'
@@ -79,7 +77,7 @@ class LoginSpec extends GebSpec {
                     .when()
                     .accept(MediaType.APPLICATION_JSON_VALUE)
                     .contentType(MediaType.APPLICATION_JSON_VALUE)
-                    .body('{ "username":"admin", "password":"pw123" }')
+                    .body('{ "username":"me", "password":"password" }')
                     .port(port)
                     .post(Login_URL)
 
