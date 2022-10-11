@@ -1,0 +1,162 @@
+import com.bmuschko.gradle.docker.tasks.image.*
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+
+buildscript {
+    repositories {
+        mavenLocal()
+        maven { url 'https://repo.spring.io/libs-snapshot' }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+
+    dependencies {
+        classpath "com.bmuschko:gradle-docker-plugin:7.1.0"
+
+        classpath "org.asciidoctor:asciidoctor-gradle-plugin:1.5.3"
+    }
+}
+
+apply plugin: com.bmuschko.gradle.docker.DockerRemoteApiPlugin
+
+apply plugin: org.asciidoctor.gradle.AsciidoctorPlugin
+
+repositories {
+    maven { url 'https://repo.spring.io/libs-snapshot' }
+}
+
+//add extra user-defined properties to the project through ext block
+ext {
+    snippetsDir = file('build/docs/generated-snippets') //output dir of rest api doc snippets generated
+    restDocsVersion = '2.0.6.RELEASE'
+    restAssuredVersion = '4.5.0'
+
+    dockerTag = "platform:${dockerVersion}"
+    dockerBuildDir = mkdir("${buildDir}/docker")
+}
+
+dependencies {
+    testImplementation "org.springframework.restdocs:spring-restdocs-core:$restDocsVersion"
+    testImplementation "org.springframework.restdocs:spring-restdocs-restassured:$restDocsVersion"
+    testImplementation "org.springframework.restdocs:spring-restdocs-asciidoctor:$restDocsVersion"
+    testImplementation "io.rest-assured:rest-assured:$restAssuredVersion"
+    testImplementation "io.rest-assured:json-path:$restAssuredVersion"
+    testImplementation "io.rest-assured:xml-path:$restAssuredVersion"
+    testImplementation 'org.grails.plugins:geb'
+    testImplementation 'io.micronaut:micronaut-inject-groovy'
+    testImplementation 'org.grails:grails-gorm-testing-support'
+    testImplementation 'org.mockito:mockito-core'
+    testImplementation 'org.grails:grails-web-testing-support'
+    testImplementation 'org.testcontainers:mysql:1.17.5'
+    testImplementation "org.testcontainers:spock:1.17.5"
+}
+
+//task to clean generated rest api docs snippets dir
+task cleanSnippetsDir(type: Delete) {
+    delete fileTree(dir: snippetsDir)
+}
+
+//configure test task
+test {
+    dependsOn cleanSnippetsDir //clean rest api docs generated before running tests
+    outputs.dir snippetsDir //add snippets dir as an output dir
+    maxHeapSize = "16g"
+}
+
+integrationTest {
+    useJUnitPlatform()
+    description = 'Runs integration tests.'
+    group = 'verification'
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+    maxHeapSize = "8g"
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStackTraces = true
+        showStandardStreams = true
+        exceptionFormat = TestExceptionFormat.FULL
+    }
+
+    dependsOn([assemble])
+}
+
+//configure asciidoctor task provided by Gradle asciidoctor plugin- https://github.com/asciidoctor/asciidoctor-gradle-plugin
+asciidoctor {
+    configure(integrationTest) {
+        systemProperties System.properties
+    }
+
+    //integration tests are run before asciidoctor task
+    dependsOn integrationTest
+    logDocuments = true
+    sourceDir = file('src/docs')
+    inputs.dir snippetsDir
+    separateOutputDirs = false
+
+    attributes 'snippets': snippetsDir //configure snippets attribute for .adoc files
+
+}
+
+task packageDocumentation(type: Zip) {
+    archiveFileName = "REST-documentation.zip"
+    destinationDirectory = file("$buildDir/dist")
+
+    from "$buildDir/asciidoc"
+}
+
+asciidoctor.finalizedBy packageDocumentation
+
+
+
+task prepareDocker(type: Copy, dependsOn: assemble) {
+    description = 'Copy docker and application jar to Docker temporal build directory'
+    group = 'Docker'
+
+    String client = System.getenv('CLIENT') ?: System.getProperty("client")
+    String rulesFile = System.getenv('RULES_FILE') ?: System.getProperty("rules.file")
+
+    from "${rootProject.projectDir}/Dockerfile"
+    from "${rootProject.projectDir}/rules/${client}/${rulesFile}"
+    from project.bootJar
+
+    into dockerBuildDir
+}
+
+task buildImage(type: DockerBuildImage, dependsOn: prepareDocker) {
+    description = 'Create Docker image to run the Grails application'
+    group = 'Docker'
+    inputDir = file(dockerBuildDir)
+    images.add(dockerTag)
+
+    if(dockerRegistry) {
+        images.add("${dockerRegistry}/$dockerTag".toString())
+    }
+}
+
+task pushImage(type: DockerPushImage, dependsOn: buildImage) {
+    group "docker"
+    description "Push custom docker image."
+
+    registryCredentials {
+        url = dockerRegistry
+        username = dockerUserName
+        password = dockerPassword
+    }
+
+    images.add("${dockerRegistry}/$dockerTag".toString())
+}
+
+
+task pullImage(type: DockerPullImage) {
+    group "docker"
+    description "Pull docker image."
+
+    image = pullImageName
+
+    registryCredentials {
+        url = dockerRegistry
+        username = dockerUserName
+        password = dockerPassword
+    }
+}
+
+//integrationTest.dependsOn(pullImage)
